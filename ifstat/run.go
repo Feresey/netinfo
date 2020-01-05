@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -13,19 +14,27 @@ const (
 	MB
 )
 
+var bytesPool = &sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 30)
+		return &b
+	},
+}
+
 func getInt(r io.Reader) int {
-	raw := make([]byte, 30)
-	n, err := r.Read(raw)
+	raw := bytesPool.Get().(*[]byte)
+	defer bytesPool.Put(raw)
+	n, err := r.Read(*raw)
 	if err != nil {
 		if err != io.EOF {
 			log.Println(err)
 		}
 	}
-	if n < 2 || raw[n-1] != '\n' {
+	if n < 2 || (*raw)[n-1] != '\n' {
 		log.Println("File corrupted")
 		return 0
 	}
-	res, err := strconv.Atoi(string(raw[:n-1]))
+	res, err := strconv.Atoi(string((*raw)[:n-1]))
 	if err != nil {
 		log.Println(err)
 	}
@@ -65,7 +74,7 @@ func (I *IfStat) readDetached() (<-chan pair, func()) {
 				last <- I.MustRead()
 			case <-done:
 				close(last)
-				for _,p:=range I.Path{
+				for _, p := range I.Path {
 					p.rx.Close()
 				}
 				return
@@ -82,7 +91,7 @@ func (I *IfStat) runDetached(last <-chan pair) {
 		rxInt := (curr.rx - prev.rx) * prod
 		txInt := (curr.tx - prev.tx) * prod
 
-		fmt.Fprintln(I.Out, prettyPrint(rxInt)+" "+prettyPrint(txInt))
+		_, _ = I.Out.Write([]byte(prettyPrint(rxInt) + " " + prettyPrint(txInt) + "\n"))
 
 		prev = curr
 	}
