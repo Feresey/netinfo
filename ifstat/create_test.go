@@ -10,7 +10,6 @@ import (
 
 func TestMain(m *testing.M) {
 	log.SetOutput(ioutil.Discard)
-	// logger = log.New(os.Null)
 	os.Exit(m.Run())
 }
 
@@ -86,5 +85,5 @@ func Test_checkIfaceExists(t *testing.T) {
 
 		})
 	}
-	_, _ = NewStat("eno1", "eno1", "", "error")
+	NewStat("eno1", "eno1", "", "error")
 }

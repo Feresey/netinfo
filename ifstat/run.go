@@ -2,7 +2,7 @@ package ifstat
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"strconv"
 	"time"
@@ -13,27 +13,29 @@ const (
 	MB
 )
 
-func getInt(path string) int {
-	raw, err := ioutil.ReadFile(path)
+func getInt(r io.Reader) int {
+	raw := make([]byte, 30)
+	n, err := r.Read(raw)
 	if err != nil {
-		log.Println(err)
+		if err != io.EOF {
+			log.Println(err)
+		}
 	}
-	if len(raw) < 2 || raw[len(raw)-1] != '\n' {
-		log.Printf("File %q corrupted", path)
+	if n < 2 || raw[n-1] != '\n' {
+		log.Println("File corrupted")
 		return 0
 	}
-	res, err := strconv.Atoi(string(raw[:len(raw)-1]))
+	res, err := strconv.Atoi(string(raw[:n-1]))
 	if err != nil {
 		log.Println(err)
 	}
-
 	return res
 }
 
 func (i *IfStat) MustRead() (res pair) {
 	for _, ifpath := range i.Path {
-		res.rx += getInt(ifpath + "rx_bytes")
-		res.tx += getInt(ifpath + "tx_bytes")
+		res.rx += getInt(ifpath.rx)
+		res.tx += getInt(ifpath.tx)
 	}
 	return
 }
@@ -63,6 +65,9 @@ func (I *IfStat) readDetached() (<-chan pair, func()) {
 				last <- I.MustRead()
 			case <-done:
 				close(last)
+				for _,p:=range I.Path{
+					p.rx.Close()
+				}
 				return
 			}
 		}

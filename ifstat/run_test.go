@@ -3,46 +3,34 @@ package ifstat
 import (
 	"bufio"
 	"bytes"
+	"io"
+	"io/ioutil"
 	"os"
 	"reflect"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-func writeFiles(rxFile, txFile *os.File, rx, tx []byte) {
-	_, err := rxFile.WriteAt(rx, 0)
-	if err != nil {
-		panic(err)
-	}
-	_, err = txFile.WriteAt(tx, 0)
-	if err != nil {
-		panic(err)
-	}
+type fakeBuffer struct {
+	data []byte
 }
 
+func (B *fakeBuffer) Read(b []byte) (int, error) {
+	if B.data == nil {
+		return 0, io.EOF
+	}
+	copy(b, B.data)
+	return len(B.data), nil
+}
+
+func (B *fakeBuffer) Close() error {
+	B.data = nil
+	return nil
+}
+
+func (B *fakeBuffer) IsClosed() bool { return B.data == nil }
+
 func TestIfStat(t *testing.T) {
-	dir := os.TempDir() + "/" + uuid.New().String() + "/"
-	err := os.Mkdir(dir, 0777)
-	if err != nil {
-		if !os.IsExist(err) {
-			t.Error(err)
-			return
-		}
-	}
-
-	rx, err := os.Create(dir + "rx_bytes")
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	tx, err := os.Create(dir + "tx_bytes")
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
 	tests := []struct {
 		name string
 		rx   []byte
@@ -57,7 +45,6 @@ func TestIfStat(t *testing.T) {
 		},
 		{
 			name: "rx corrupted",
-			rx:   []byte("aaa\n"),
 			tx:   []byte("456\n"),
 			want: pair{0, 456},
 		},
@@ -69,11 +56,13 @@ func TestIfStat(t *testing.T) {
 		},
 	}
 
-	stat := &IfStat{Path: []string{dir}, Delay: time.Millisecond, Out: os.Stdout}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			writeFiles(rx, tx, tt.rx, tt.tx)
+			stat := &IfStat{
+				Path: []readPair{
+					{&fakeBuffer{tt.rx}, &fakeBuffer{tt.tx}},
+				},
+			}
 			p := stat.MustRead()
 			if !reflect.DeepEqual(tt.want, p) {
 				t.Errorf("result does not match.\nExpected:\n%#v\nGiven:\n%#v", tt.want, p)
@@ -82,38 +71,41 @@ func TestIfStat(t *testing.T) {
 	}
 
 	t.Run("readDetached", func(t *testing.T) {
-		writeFiles(rx, tx, []byte("123\n"), []byte("123\n"))
-		c, cancel := stat.readDetached()
+		buf := &fakeBuffer{[]byte("123\n")}
+		stat := &IfStat{
+			Path:  []readPair{{buf, buf}},
+			Delay: time.Millisecond,
+			Out:   os.Stdout,
+		}
+		wait := make(chan struct{})
+		c, stop := stat.readDetached()
 		go func() {
 			want := pair{123, 123}
 			for p := range c {
 				if !reflect.DeepEqual(p, want) {
 					t.Errorf("result does not match.\nExpected:\n%#v\nGiven:\n%#v", want, p)
+					break
 				}
 			}
+			wait <- struct{}{}
 		}()
 		time.Sleep(20 * time.Millisecond)
-		cancel()
+		stop()
+		<-wait
 		_, ok := <-c
 		if ok {
 			t.Error("channel must be closed")
 		}
+		if !buf.IsClosed() {
+			t.Error("buffer must be closed")
+		}
 	})
 
 	t.Run("Run", func(t *testing.T) {
-		cancel := stat.Run()
-		time.Sleep(2 * time.Millisecond)
-		cancel()
-	})
-
-	_ = rx.Close()
-	_ = tx.Close()
-	_ = os.RemoveAll(dir)
-	t.Run("no files", func(t *testing.T) {
-		p := stat.MustRead()
-		if !reflect.DeepEqual(pair{}, p) {
-			t.Errorf("result does not match.\nExpected:\n%#v\nGiven:\n%#v", pair{}, p)
-		}
+		stat := IfStat{Delay: time.Millisecond, Out: ioutil.Discard}
+		stop := stat.Run()
+		time.Sleep(20 * time.Millisecond)
+		stop()
 	})
 }
 
@@ -168,5 +160,45 @@ func TestIfStat_runDetached(t *testing.T) {
 		if scanner.Text() != line {
 			t.Errorf("result does not match.\nExpected:\n%q\nGiven:\n%q", line, scanner.Text())
 		}
+	}
+}
+
+type errorReader []byte
+
+func (errorReader) Read([]byte) (int, error) { return 0, InterfaceNotExists("") }
+
+func Test_getInt(t *testing.T) {
+	tests := []struct {
+		name string
+		r    io.Reader
+		want int
+	}{
+		{
+			name: "one",
+			r:    bytes.NewBuffer([]byte("1\n")),
+			want: 1,
+		},
+		{
+			name: "not a number",
+			r:    bytes.NewBuffer([]byte("abc\n")),
+			want: 0,
+		},
+		{
+			name: "no newline",
+			r:    bytes.NewBuffer([]byte("123")),
+			want: 0,
+		},
+		{
+			name: "no data",
+			r:    errorReader{},
+			want: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getInt(tt.r); got != tt.want {
+				t.Errorf("getInt() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

@@ -24,20 +24,26 @@ func makeUniq(slice []string) []string {
 	return slice[:write]
 }
 
-func NewStat(names ...string) (*IfStat, error) {
+func NewStat(names ...string) *IfStat {
 	sort.Strings(names)
 	names = makeUniq(names)
-	path := make([]string, 0, len(names))
+	path := make([]readPair, 0, len(names))
 	for _, ifname := range names {
 		if err := checkIfaceExists(ifname); err != nil {
 			log.Println(err)
 			continue
 		}
-
-		path = append(path, "/sys/class/net/"+ifname+"/statistics/")
+		s := "/sys/class/net/" + ifname + "/statistics/"
+		rx, _ := os.Open(s + "rx_bytes")
+		tx, _ := os.Open(s + "tx_bytes")
+		path = append(path,
+			readPair{
+				(*fileWithOffset)(rx),
+				(*fileWithOffset)(tx),
+			})
 	}
 
-	return &IfStat{Path: path, Delay: time.Second, Out: os.Stdout}, nil
+	return &IfStat{Path: path, Delay: time.Second, Out: os.Stdout}
 }
 
 func checkIfaceExists(name string) error {
