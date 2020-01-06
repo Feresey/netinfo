@@ -166,31 +166,32 @@ func TestIfStat_runDetached(t *testing.T) {
 type errorReader []byte
 
 func (errorReader) Read([]byte) (int, error) { return 0, InterfaceNotExists("") }
+func (errorReader) Close() error             { return nil }
 
 func Test_getInt(t *testing.T) {
 	tests := []struct {
 		name string
-		r    io.Reader
+		r    offsetReader
 		want int
 	}{
 		{
 			name: "one",
-			r:    bytes.NewBuffer([]byte("1\n")),
+			r:    &fakeBuffer{[]byte("1\n")},
 			want: 1,
 		},
 		{
 			name: "not a number",
-			r:    bytes.NewBuffer([]byte("abc\n")),
+			r:    &fakeBuffer{[]byte("abc\n")},
 			want: 0,
 		},
 		{
 			name: "no newline",
-			r:    bytes.NewBuffer([]byte("123")),
+			r:    &fakeBuffer{[]byte("123")},
 			want: 0,
 		},
 		{
 			name: "no data",
-			r:    errorReader{},
+			r:    &errorReader{},
 			want: 0,
 		},
 	}

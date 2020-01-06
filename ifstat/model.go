@@ -8,11 +8,16 @@ import (
 
 type InterfaceNotExists string
 
+type offsetReader interface {
+	Read([]byte) (int, error)
+	Close() error
+}
+
 type fileWithOffset os.File
 
 type readPair struct {
-	rx io.ReadCloser
-	tx io.ReadCloser
+	rx offsetReader
+	tx offsetReader
 }
 
 type IfStat struct {

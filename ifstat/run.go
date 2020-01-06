@@ -21,7 +21,7 @@ var bytesPool = &sync.Pool{
 	},
 }
 
-func getInt(r io.Reader) int {
+func getInt(r offsetReader) int {
 	raw := bytesPool.Get().(*[]byte)
 	defer bytesPool.Put(raw)
 	n, err := r.Read(*raw)
