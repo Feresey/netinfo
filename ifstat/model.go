@@ -2,22 +2,12 @@ package ifstat
 
 import (
 	"io"
-	"os"
 	"time"
 )
 
-type InterfaceNotExists string
-
-type offsetReader interface {
-	Read([]byte) (int, error)
-	Close() error
-}
-
-type fileWithOffset os.File
-
 type readPair struct {
-	rx offsetReader
-	tx offsetReader
+	rx string
+	tx string
 }
 
 type IfStat struct {

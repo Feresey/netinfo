@@ -2,10 +2,7 @@ package ifstat
 
 import (
 	"fmt"
-	"io"
-	"log"
-	"strconv"
-	"sync"
+	"os"
 	"time"
 )
 
@@ -14,31 +11,14 @@ const (
 	MB
 )
 
-var bytesPool = &sync.Pool{
-	New: func() interface{} {
-		b := make([]byte, 30)
-		return &b
-	},
-}
-
-func getInt(r offsetReader) int {
-	raw := bytesPool.Get().(*[]byte)
-	defer bytesPool.Put(raw)
-	n, err := r.Read(*raw)
+func getInt(r string) (res int) {
+	file, err := os.Open(r)
 	if err != nil {
-		if err != io.EOF {
-			log.Println(err)
-		}
-	}
-	if n < 2 || (*raw)[n-1] != '\n' {
-		log.Println("File corrupted")
 		return 0
 	}
-	res, err := strconv.Atoi(string((*raw)[:n-1]))
-	if err != nil {
-		log.Println(err)
-	}
-	return res
+	fmt.Fscan(file, &res)
+	file.Close()
+	return
 }
 
 func (i *IfStat) MustRead() (res pair) {
@@ -74,9 +54,9 @@ func (I *IfStat) readDetached() (<-chan pair, func()) {
 				last <- I.MustRead()
 			case <-done:
 				close(last)
-				for _, p := range I.Path {
-					p.rx.Close()
-				}
+				// for _, p := range I.Path {
+				// 	p.rx.Close()
+				// }
 				return
 			}
 		}

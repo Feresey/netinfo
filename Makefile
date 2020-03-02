@@ -1,14 +1,16 @@
-all: bin
-	go build -v -o ./bin ./cmd/...
+.PHONY: all
+all:
+	@mkdir -p build
+	go build -v -o ./build ./cmd/...
 
-bin:
-	mkdir bin
-
+.PHONY: clean
 clean:
-	rm -v ./bin/*
+	rm -v ./build/*
 
+.PHONY: install
 install:
 	go install -v ./cmd/...
 
+.PHONY: test
 test:
 	go test -v -cover ./...

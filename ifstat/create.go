@@ -2,8 +2,10 @@ package ifstat
 
 import (
 	"bufio"
+	"errors"
 	"log"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -33,13 +35,11 @@ func NewStat(names ...string) *IfStat {
 			log.Println(err)
 			continue
 		}
-		s := "/sys/class/net/" + ifname + "/statistics/"
-		rx, _ := os.Open(s + "rx_bytes")
-		tx, _ := os.Open(s + "tx_bytes")
+		prefix := filepath.Join("/sys/class/net", ifname, "statistics")
 		path = append(path,
 			readPair{
-				(*fileWithOffset)(rx),
-				(*fileWithOffset)(tx),
+				rx: filepath.Join(prefix, "rx_bytes"),
+				tx: filepath.Join(prefix, "tx_bytes"),
 			})
 	}
 
@@ -48,7 +48,7 @@ func NewStat(names ...string) *IfStat {
 
 func checkIfaceExists(name string) error {
 	if name == "" {
-		return InterfaceNotExists(name)
+		return errors.New(name)
 	}
 	file, _ := os.Open("/proc/net/dev")
 	defer file.Close()
@@ -61,5 +61,5 @@ func checkIfaceExists(name string) error {
 		}
 	}
 
-	return InterfaceNotExists(name)
+	return errors.New(name)
 }
