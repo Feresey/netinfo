@@ -9,12 +9,16 @@ import (
 )
 
 func main() {
-	accumulate := flag.Int("t", 1000, "milliseconds to accumulate data to calculate speed")
+	var accumulate int
+
+	flag.IntVar(&accumulate, "t", 1000, "milliseconds to accumulate data to calculate speed")
+
 	flag.Usage = func() {
 		fmt.Printf(`Usage of %s
   t=1000: milliseconds to accumulate data to calculate speed
   all other arguments reads as interface names, such as eth0, enp2s3 and others`, os.Args[0])
 	}
+
 	flag.Parse()
 
 	names := flag.Args()
@@ -22,15 +26,17 @@ func main() {
 		names = []string{"eno1", "wlan0"}
 	}
 
-	iface := NewStat(names...)
-	iface.Delay = time.Duration(*accumulate) * time.Millisecond
+	var (
+		iface   = newStat(time.Duration(accumulate)*time.Millisecond, names...)
+		cancel  = iface.Run()
+		sigChan = make(chan os.Signal, 1)
+		sig     os.Signal
+	)
 
-	cancel := iface.Run()
-
-	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt)
-	sig := <-sigChan
-	fmt.Println("\nCaught signal:", sig)
 
+	sig = <-sigChan
+
+	fmt.Println("\nCaught signal:", sig)
 	cancel()
 }
