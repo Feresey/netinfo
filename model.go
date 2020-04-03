@@ -1,4 +1,4 @@
-package ifstat
+package main
 
 import (
 	"io"

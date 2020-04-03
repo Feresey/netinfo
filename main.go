@@ -6,8 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"time"
-
-	"github.com/Feresey/netinfo/ifstat"
 )
 
 func main() {
@@ -24,7 +22,7 @@ func main() {
 		names = []string{"eno1", "wlan0"}
 	}
 
-	iface := ifstat.NewStat(names...)
+	iface := NewStat(names...)
 	iface.Delay = time.Duration(*accumulate) * time.Millisecond
 
 	cancel := iface.Run()
